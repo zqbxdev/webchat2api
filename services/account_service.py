@@ -387,6 +387,7 @@ class AccountService:
         normalized["success"] = int(normalized.get("success") or 0)
         normalized["fail"] = int(normalized.get("fail") or 0)
         normalized["last_used_at"] = normalized.get("last_used_at")
+        normalized["proxy"] = _clean_string(normalized.get("proxy"))
         return normalized
 
     def list_tokens(self, provider: str | None = None) -> list[str]:
@@ -824,27 +825,40 @@ class AccountService:
             items = self._list_account_items_locked(provider)
         return {"removed": removed, "items": items}
 
+    def _update_account_locked(self, access_token: str, updates: dict, provider: str | None = None) -> dict | None:
+        current = self._get_account_locked(access_token, provider)
+        if current is None:
+            return None
+        account = self._normalize_account({**current, **updates, "access_token": access_token})
+        if account is None:
+            return None
+        if account.get("status") == "限流" and config.auto_remove_rate_limited_accounts:
+            self._pop_account_locked(access_token, provider)
+            self._save_accounts()
+            log_service.add(LOG_TYPE_ACCOUNT, "自动移除限流账号", {"token": anonymize_token(access_token)})
+            return None
+        self._set_account_locked(account)
+        self._save_accounts()
+        log_service.add(LOG_TYPE_ACCOUNT, "更新账号", {"token": anonymize_token(access_token), "status": account.get("status")})
+        return dict(account)
+
     def update_account(self, access_token: str, updates: dict, provider: str | None = None) -> dict | None:
         if not access_token:
             return None
         with self._lock:
-            current = self._get_account_locked(access_token, provider)
-            if current is None:
+            return self._update_account_locked(access_token, updates, provider)
+
+    def update_account_by_identifier(self, identifier: dict[str, str], updates: dict, provider: str | None = None) -> dict | None:
+        target_provider = self._provider_filter(provider)
+        if target_provider is None:
+            return None
+        with self._lock:
+            provider_accounts = self._accounts.get(target_provider, {})
+            matched_tokens = _matched_account_tokens_by_identifiers([identifier], provider_accounts, target_provider)
+            if len(matched_tokens) != 1:
                 return None
-            account = self._normalize_account({**current, **updates, "access_token": access_token})
-            if account is None:
-                return None
-            if account.get("status") == "限流" and config.auto_remove_rate_limited_accounts:
-                self._pop_account_locked(access_token, provider)
-                self._save_accounts()
-                log_service.add(LOG_TYPE_ACCOUNT, "自动移除限流账号", {"token": anonymize_token(access_token)})
-                return None
-            self._set_account_locked(account)
-            self._save_accounts()
-            log_service.add(LOG_TYPE_ACCOUNT, "更新账号",
-                            {"token": anonymize_token(access_token), "status": account.get("status")})
-            return dict(account)
-        return None
+            access_token = next(iter(matched_tokens))
+            return self._update_account_locked(access_token, updates, target_provider)
 
     def mark_image_result(self, access_token: str, success: bool) -> dict | None:
         if not access_token:

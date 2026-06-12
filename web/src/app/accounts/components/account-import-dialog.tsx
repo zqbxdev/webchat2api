@@ -259,6 +259,7 @@ export function AccountImportDialog({ disabled, onImported }: AccountImportDialo
   const [tokenInput, setTokenInput] = useState("");
   const [importProvider, setImportProvider] = useState<ImportProvider>("gpt");
   const [sessionInput, setSessionInput] = useState("");
+  const [importProxy, setImportProxy] = useState("");
   const [geminiSecure1Psid, setGeminiSecure1Psid] = useState("");
   const [geminiSecure1Psidts, setGeminiSecure1Psidts] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -276,6 +277,7 @@ export function AccountImportDialog({ disabled, onImported }: AccountImportDialo
     setTokenInput("");
     setImportProvider("gpt");
     setSessionInput("");
+    setImportProxy("");
     setGeminiSecure1Psid("");
     setGeminiSecure1Psidts("");
     setPendingCpaImport(null);
@@ -321,12 +323,18 @@ export function AccountImportDialog({ disabled, onImported }: AccountImportDialo
     }
   };
 
-  const buildTokenPayloads = (tokens: string[]): AccountImportPayload[] => {
-    if (importProvider === "grok") {
-      return [];
-    }
+  const withImportProxy = (payload: AccountImportPayload): AccountImportPayload => {
+    const proxy = importProxy.trim();
+    return proxy ? { ...payload, proxy } : payload;
+  };
 
-    return tokens.map((token) => ({ access_token: token, provider: importProvider }));
+  const buildTokenPayloads = (tokens: string[]): AccountImportPayload[] => {
+    return tokens.map((token) => {
+      const payload: AccountImportPayload = importProvider === "grok"
+        ? { sso: token, provider: importProvider }
+        : { access_token: token, provider: importProvider };
+      return withImportProxy(payload);
+    });
   };
 
   const normalizeImportTokens = (tokens: string[]) => {
@@ -344,12 +352,25 @@ export function AccountImportDialog({ disabled, onImported }: AccountImportDialo
     toast.error("Grok 每行仅支持裸 SSO 值或单个 sso=完整值；不支持 sso-rw、完整 Cookie header 或其他 name=value。");
   };
 
+  const renderImportProxyField = () => (
+    <div className="space-y-2">
+      <label className="text-sm font-medium text-stone-700">账号代理</label>
+      <Input
+        value={importProxy}
+        onChange={(event) => setImportProxy(event.target.value)}
+        placeholder="留空使用全局代理，例如 http://127.0.0.1:7890"
+        className="h-11 rounded-xl border-stone-200 bg-white"
+      />
+      <p className="text-xs leading-5 text-stone-500">本次导入的账号会保存该代理；留空则使用系统全局代理。</p>
+    </div>
+  );
+
   const buildGeminiSessionPayload = (secure1Psid: string, secure1Psidts: string): AccountImportPayload => {
-    return {
+    return withImportProxy({
       provider: "gemini",
       "__Secure-1PSID": secure1Psid,
       "__Secure-1PSIDTS": secure1Psidts,
-    };
+    });
   };
 
   const handleImportTokenText = async () => {
@@ -469,7 +490,7 @@ export function AccountImportDialog({ disabled, onImported }: AccountImportDialo
         }),
       );
 
-      const accounts = results.flatMap((item) => item.accounts);
+      const accounts = results.flatMap((item) => item.accounts).map(withImportProxy);
       const tokens = accounts.map((item) => item.access_token).filter((token): token is string => Boolean(token));
       const parsedFileCount = results.filter((item) => item.accounts.length > 0).length;
       const errorCount = results.length - parsedFileCount;
@@ -589,6 +610,7 @@ export function AccountImportDialog({ disabled, onImported }: AccountImportDialo
               className="min-h-48 resize-none rounded-xl border-stone-200"
             />
           </div>
+          {renderImportProxyField()}
           <div className="rounded-2xl border border-dashed border-stone-200 bg-stone-50 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-1">
@@ -637,6 +659,7 @@ export function AccountImportDialog({ disabled, onImported }: AccountImportDialo
             <div className="font-medium">风险提示</div>
             <div>不要使用自己的大号，尽量使用不常用的小号进行导入，避免出现封号风险。本项目不承担任何封号风险责任。</div>
           </div>
+          {renderImportProxyField()}
           <div className="grid gap-4 sm:grid-cols-2">
             {importProvider === "gemini" ? (
               <>
@@ -688,6 +711,7 @@ export function AccountImportDialog({ disabled, onImported }: AccountImportDialo
             <ArrowLeft className="size-4" />
             返回导入方式
           </button>
+          {renderImportProxyField()}
           <div className="rounded-2xl border border-dashed border-stone-200 bg-stone-50 p-5">
             <div className="space-y-2">
               <div className="text-sm font-medium text-stone-800">多选本地 JSON 文件</div>

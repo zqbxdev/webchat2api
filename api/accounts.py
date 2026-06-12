@@ -81,11 +81,14 @@ class AccountExportRequest(BaseModel):
 
 class AccountUpdateRequest(BaseModel):
     access_token: str = ""
+    account_id: str | None = None
+    row_id: str | None = None
     type: str | None = None
     provider: str | None = None
     target_provider: Literal["gpt", "grok", "gemini"] | None = None
     status: str | None = None
     quota: int | None = None
+    proxy: str | None = None
 
 
 class CPAPoolCreateRequest(BaseModel):
@@ -241,7 +244,7 @@ def _validate_gemini_import_payloads(tokens: list[str], payloads: list[dict[str,
     if not payloads:
         raise HTTPException(status_code=400, detail={"error": "Gemini 目前只支持 Cookie 双字段导入"})
     top_level_gemini = normalize_provider(provider) == GEMINI_PROVIDER
-    allowed_keys = {"provider", "__Secure-1PSID", "__Secure-1PSIDTS"}
+    allowed_keys = {"provider", "__Secure-1PSID", "__Secure-1PSIDTS", "proxy"}
     for item in payloads:
         item_provider = str(item.get("provider") or "").strip()
         if top_level_gemini and item_provider and normalize_account_provider(item_provider) != GEMINI_PROVIDER:
@@ -285,13 +288,20 @@ def _grok_import_requested(provider: str | None, payloads: list[dict[str, Any]])
 def _validate_grok_import_payloads(tokens: list[str], payloads: list[dict[str, Any]], provider: str | None) -> list[str]:
     if not _grok_import_requested(provider, payloads):
         return tokens
-    if payloads:
-        raise HTTPException(status_code=400, detail={"error": "Grok 导入只接受裸 SSO 值，或每行一个 sso=<值>；不支持 sso-rw、完整 Cookie header、JSON、CPA、cookies 或 accounts 账号 payload"})
-    if not tokens:
+    if not tokens and not payloads:
         raise HTTPException(status_code=400, detail={"error": "Grok 导入只接受裸 SSO 值，或每行一个 sso=<值>"})
+    allowed_keys = {"provider", "sso", "proxy"}
+    for item in payloads:
+        item_provider = str(item.get("provider") or provider or "").strip()
+        if item_provider and normalize_account_provider(item_provider) != GROK_PROVIDER:
+            raise HTTPException(status_code=400, detail={"error": "Grok 导入不能混用其他供应商账号"})
+        extra_keys = {key for key, value in item.items() if value is not None} - allowed_keys
+        sso = str(item.get("sso") or "").strip()
+        if extra_keys or not _normalize_grok_sso_import_token(sso):
+            raise HTTPException(status_code=400, detail={"error": "Grok 导入只接受裸 SSO 值，或每行一个 sso=<值>；不支持 sso-rw、完整 Cookie header、其他 Cookie 名称、JSON、CPA 或 cookies"})
     normalized_tokens = [_normalize_grok_sso_import_token(token) for token in tokens]
     if not all(normalized_tokens):
-        raise HTTPException(status_code=400, detail={"error": "Grok 导入只接受裸 SSO 值，或每行一个 sso=<值>；不支持 sso-rw、完整 Cookie header、其他 Cookie 名称、JSON、CPA、cookies 或 accounts 账号 payload"})
+        raise HTTPException(status_code=400, detail={"error": "Grok 导入只接受裸 SSO 值，或每行一个 sso=<值>；不支持 sso-rw、完整 Cookie header、其他 Cookie 名称、JSON、CPA 或 cookies"})
     return normalized_tokens
 
 
@@ -480,8 +490,9 @@ def create_router() -> APIRouter:
     async def update_account(body: AccountUpdateRequest, authorization: str | None = Header(default=None)):
         require_admin(authorization)
         access_token = str(body.access_token or "").strip()
-        if not access_token:
-            raise HTTPException(status_code=400, detail={"error": "access_token is required"})
+        identifier = _delete_identifiers([{"account_id": body.account_id, "row_id": body.row_id}])
+        if not access_token and not identifier:
+            raise HTTPException(status_code=400, detail={"error": "access_token or identifier is required"})
         updates = {
             key: value
             for key, value in {
@@ -489,12 +500,16 @@ def create_router() -> APIRouter:
                 "provider": body.provider,
                 "status": body.status,
                 "quota": body.quota,
+                "proxy": body.proxy,
             }.items()
             if value is not None
         }
         if not updates:
             raise HTTPException(status_code=400, detail={"error": "还没有检测到改动，请修改后再保存"})
-        account = account_service.update_account(access_token, updates, provider=body.target_provider)
+        if access_token:
+            account = account_service.update_account(access_token, updates, provider=body.target_provider)
+        else:
+            account = account_service.update_account_by_identifier(identifier[0], updates, provider=body.target_provider)
         if account is None:
             raise HTTPException(status_code=404, detail={"error": "account not found"})
         return {"item": sanitize_account(account), "items": sanitize_accounts(account_service.list_accounts(provider=body.target_provider))}

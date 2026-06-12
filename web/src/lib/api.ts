@@ -44,6 +44,7 @@ export type Account = {
   last_refresh_success_at?: string | null;
   refresh_backoff_until?: string | null;
   cooldown_until?: string | null;
+  proxy?: string | null;
   expired_reason?: string | null;
   expired_at?: string | null;
 };
@@ -435,6 +436,9 @@ export async function updateAccount(
     provider?: AccountProvider;
     status?: AccountStatus;
     quota?: number;
+    proxy?: string;
+    account_id?: string | null;
+    row_id?: string | null;
   },
   provider?: AccountExportProvider,
 ) {
@@ -442,7 +446,7 @@ export async function updateAccount(
     method: "POST",
     body: {
       access_token: accessToken,
-      ...(provider ? { provider } : {}),
+      ...(provider ? { target_provider: provider } : {}),
       ...updates,
     },
   });

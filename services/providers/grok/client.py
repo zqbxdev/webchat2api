@@ -668,7 +668,11 @@ class GrokConsoleClient:
     def __init__(self, access_token: str) -> None:
         self.access_token = access_token
         self.network_profile = _grok_console_profile()
-        self.session = create_session(impersonate=self.network_profile.impersonate, verify=self.network_profile.verify)
+        from services.account_service import account_service
+
+        account = account_service.get_account(access_token, provider=GROK_PROVIDER)
+        account = account if isinstance(account, dict) else None
+        self.session = create_session(impersonate=self.network_profile.impersonate, verify=self.network_profile.verify, account=account)
 
     def close(self) -> None:
         self.session.close()
@@ -1840,7 +1844,7 @@ class GrokAppChatClient:
         self.account = account if isinstance(account, dict) else None
         self.network_profile = _grok_app_chat_profile()
         impersonate = _app_chat_impersonate(self.network_profile, self.account)
-        self.session = create_session(impersonate=impersonate, verify=self.network_profile.verify)
+        self.session = create_session(impersonate=impersonate, verify=self.network_profile.verify, account=self.account)
 
     def close(self) -> None:
         self.session.close()

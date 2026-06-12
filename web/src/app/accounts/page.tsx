@@ -730,6 +730,7 @@ function AccountsPageContent() {
   const [pageSize] = useState("10");
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [editStatus, setEditStatus] = useState<AccountStatus>("正常");
+  const [editProxy, setEditProxy] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
@@ -940,6 +941,7 @@ function AccountsPageContent() {
   const openEditDialog = (account: Account) => {
     setEditingAccount(account);
     setEditStatus(account.status);
+    setEditProxy(String(account.proxy ?? ""));
   };
 
   const handleUpdateAccount = async () => {
@@ -949,17 +951,29 @@ function AccountsPageContent() {
 
     const provider = accountProviderId(editingAccount);
     const token = accountToken(editingAccount);
-    if (!token) {
+    const proxy = editProxy.trim();
+    const statusChanged = editStatus !== editingAccount.status;
+    const proxyChanged = proxy !== String(editingAccount.proxy ?? "").trim();
+    if (!token && statusChanged) {
       toast.error("脱敏账号不能在列表中直接编辑，请重新导入或通过后端管理接口处理");
+      return;
+    }
+    if (!token && !proxyChanged) {
+      toast.error("还没有检测到改动，请修改后再保存");
       return;
     }
 
     setIsUpdating(true);
     try {
-      const data = await updateAccount(token, { status: editStatus }, provider);
+      const data = await updateAccount(token, {
+        ...(token ? { status: editStatus } : {}),
+        proxy,
+        account_id: editingAccount.account_id,
+        row_id: editingAccount.row_id,
+      }, provider);
       handleProviderMutationResult(provider, data.items);
       setEditingAccount(null);
-      toast.success("账号状态已更新");
+      toast.success("账号设置已更新");
     } catch (error) {
       const message = error instanceof Error ? error.message : "更新账号失败";
       toast.error(message);
@@ -1035,7 +1049,7 @@ function AccountsPageContent() {
       <Dialog open={Boolean(editingAccount)} onOpenChange={(open) => (!open ? setEditingAccount(null) : null)}>
         <DialogContent showCloseButton={false} className="rounded-2xl p-6">
           <DialogHeader className="gap-2">
-            <DialogTitle>编辑账户状态</DialogTitle>
+            <DialogTitle>编辑账户设置</DialogTitle>
             <DialogDescription className="text-sm leading-6">
               当前账号归属 {editingAccount ? getAccountProviderLabel(editingAccount.provider) : ""}；更新请求会按该服务商定位账号。
             </DialogDescription>
@@ -1056,6 +1070,16 @@ function AccountsPageContent() {
                   ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-stone-700">账号代理</label>
+            <Input
+              value={editProxy}
+              onChange={(event) => setEditProxy(event.target.value)}
+              placeholder="留空使用全局代理，例如 http://127.0.0.1:7890"
+              className="h-11 rounded-xl border-stone-200 bg-white"
+            />
+            <p className="text-xs leading-5 text-stone-500">设置后该账号请求优先使用此代理；留空则使用系统全局代理。</p>
           </div>
           <DialogFooter className="pt-2">
             <Button

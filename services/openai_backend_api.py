@@ -79,6 +79,7 @@ class OpenAIBackendAPI:
         self.client_version = DEFAULT_CLIENT_VERSION
         self.client_build_number = DEFAULT_CLIENT_BUILD_NUMBER
         self.access_token = access_token
+        self.account = self._load_account()
         self.network_profile = self._build_network_profile()
         self.fp = self.network_profile.as_fingerprint()
         self.user_agent = self.fp["user-agent"]
@@ -86,7 +87,7 @@ class OpenAIBackendAPI:
         self.session_id = self.fp["oai-session-id"]
         self.pow_script_sources: list[str] = []
         self.pow_data_build = ""
-        self.session = create_session(impersonate=self.network_profile.impersonate, verify=self.network_profile.verify)
+        self.session = create_session(impersonate=self.network_profile.impersonate, verify=self.network_profile.verify, account=self.account)
         self.session.headers.update(build_chatgpt_web_headers(
             self.network_profile,
             base_url=self.base_url,
@@ -105,9 +106,12 @@ class OpenAIBackendAPI:
     def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
         self.close()
 
-    def _build_network_profile(self):
+    def _load_account(self) -> dict:
         account = account_service.get_account(self.access_token) if self.access_token else {}
-        account = account if isinstance(account, dict) else {}
+        return account if isinstance(account, dict) else {}
+
+    def _build_network_profile(self):
+        account = self.account
         global_fp = config.data.get("chatgpt_fingerprint")
         global_fp = global_fp if isinstance(global_fp, dict) else {}
         return build_chatgpt_web_profile(account, global_fp)

@@ -11,8 +11,15 @@ from services.config import config
 
 
 class ProxySettingsStore:
-    def build_session_kwargs(self, **session_kwargs) -> dict[str, object]:
-        proxy = config.get_proxy_settings()
+    def resolve_proxy(self, account: dict | None = None) -> str:
+        if isinstance(account, dict):
+            proxy = _clean(account.get("proxy"))
+            if proxy:
+                return proxy
+        return config.get_proxy_settings()
+
+    def build_session_kwargs(self, *, account: dict | None = None, **session_kwargs) -> dict[str, object]:
+        proxy = self.resolve_proxy(account)
         if proxy:
             session_kwargs["proxy"] = proxy
         return session_kwargs

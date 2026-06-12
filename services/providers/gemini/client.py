@@ -180,6 +180,23 @@ def raise_unsupported_image_input() -> None:
     raise HTTPException(status_code=400, detail={"error": GEMINI_WEB_IMAGE_UNSUPPORTED_DETAIL})
 
 
+def contains_image_content(value: object) -> bool:
+    if isinstance(value, dict):
+        block_type = str(value.get("type") or "").strip()
+        if block_type in GEMINI_IMAGE_PART_TYPES:
+            return True
+        if any(key in value for key in GEMINI_IMAGE_PAYLOAD_KEYS):
+            return True
+        return any(contains_image_content(item) for item in value.values())
+    if isinstance(value, list):
+        return any(contains_image_content(item) for item in value)
+    return False
+
+
+def raise_unsupported_image_input() -> None:
+    raise HTTPException(status_code=400, detail={"error": GEMINI_WEB_IMAGE_UNSUPPORTED_DETAIL})
+
+
 def message_text(content: object) -> str:
     if isinstance(content, str):
         return content
@@ -459,11 +476,12 @@ def parse_web_response_text(raw_text: str) -> object:
 
 
 class GeminiWebClient:
-    def __init__(self, cookie_header: str, user_agent: str | None = None) -> None:
+    def __init__(self, cookie_header: str, user_agent: str | None = None, account: dict[str, Any] | None = None) -> None:
         self.cookie_header = cookie_header
         self.user_agent = user_agent or GEMINI_BROWSER_USER_AGENT
         self.session_token = ""
-        self.session = create_session()
+        self.account = account if isinstance(account, dict) else None
+        self.session = create_session(account=self.account)
 
     def __enter__(self) -> "GeminiWebClient":
         return self
@@ -587,7 +605,7 @@ def fetch_authenticated_init_body() -> str:
         return ""
     account = account_service.get_account(access_token) or {"access_token": access_token, "provider": "gemini"}
     cookie_header = account_cookie_header(account)
-    with GeminiWebClient(cookie_header, account.get("user_agent")) as client:
+    with GeminiWebClient(cookie_header, account.get("user_agent"), account=account) as client:
         init_body = client.fetch_init_body()
         persist_gemini_session(account_service, access_token, account, client.cookie_header)
         return init_body
@@ -614,7 +632,7 @@ def chat_completion(body: dict[str, Any], spec: ModelSpec, messages: list[dict[s
     if session_token:
         payload["session_token"] = session_token
     try:
-        with GeminiWebClient(cookie_header, account.get("user_agent")) as client:
+        with GeminiWebClient(cookie_header, account.get("user_agent"), account=account) as client:
             response_payload = client.generate(payload)
             persist_gemini_session(account_service, access_token, account, client.cookie_header, client.session_token)
     except GeminiWebError as exc:

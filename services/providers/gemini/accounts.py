@@ -289,7 +289,7 @@ def validate_remote_info(access_token: str, account: dict[str, Any] | None = Non
     if access_token:
         source.setdefault("access_token", access_token)
     cookie_header_value = account_cookie_header(source)
-    with GeminiWebClient(cookie_header_value, source.get("user_agent")) as client:
+    with GeminiWebClient(cookie_header_value, source.get("user_agent"), account=source) as client:
         client.rotate_psidts()
         session_token = client.bootstrap_session_token()
         return gemini_session_writeback(source, client.cookie_header, session_token)
