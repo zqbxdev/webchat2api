@@ -380,8 +380,16 @@ def conversation_events(
     yield from iter_conversation_payloads(payloads, history_text, history_messages)
 
 
+def _account_proxy(token: str) -> str:
+    if not token:
+        return ""
+    account = account_service.get_account(token)
+    return str((account or {}).get("proxy") or "")
+
+
 def text_backend() -> OpenAIBackendAPI:
-    return OpenAIBackendAPI(access_token=account_service.get_text_access_token())
+    token = account_service.get_text_access_token()
+    return OpenAIBackendAPI(access_token=token, account_proxy=_account_proxy(token))
 
 
 def stream_text_deltas(backend: OpenAIBackendAPI, request: ConversationRequest) -> Iterator[str]:
@@ -394,7 +402,7 @@ def stream_text_deltas(backend: OpenAIBackendAPI, request: ConversationRequest) 
         if token:
             attempted_tokens.add(token)
         try:
-            active_backend = OpenAIBackendAPI(access_token=token)
+            active_backend = OpenAIBackendAPI(access_token=token, account_proxy=_account_proxy(token))
             try:
                 for event in conversation_events(active_backend, messages=request.messages, model=request.model, prompt=request.prompt):
                     if event.get("type") != "conversation.delta":
@@ -521,7 +529,7 @@ def stream_image_outputs_with_pool(request: ConversationRequest) -> Iterator[Ima
             emitted_for_token = False
             returned_message = False
             returned_result = False
-            backend = OpenAIBackendAPI(access_token=token)
+            backend = OpenAIBackendAPI(access_token=token, account_proxy=_account_proxy(token))
             try:
                 try:
                     for output in stream_image_outputs(backend, request, index, request.n):

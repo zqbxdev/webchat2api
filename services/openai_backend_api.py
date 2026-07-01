@@ -69,16 +69,18 @@ class OpenAIBackendAPI:
     - 协议兼容转换放在 `services.protocol`
     """
 
-    def __init__(self, access_token: str = "") -> None:
+    def __init__(self, access_token: str = "", *, account_proxy: str = "") -> None:
         """初始化后端客户端。
 
         参数：
         - `access_token`：可选。传入后表示使用已登录链路；不传则使用未登录链路。
+        - `account_proxy`：可选。账号级代理 URL，优先于全局代理。
         """
         self.base_url = "https://chatgpt.com"
         self.client_version = DEFAULT_CLIENT_VERSION
         self.client_build_number = DEFAULT_CLIENT_BUILD_NUMBER
         self.access_token = access_token
+        self.account_proxy = account_proxy
         self.network_profile = self._build_network_profile()
         self.fp = self.network_profile.as_fingerprint()
         self.user_agent = self.fp["user-agent"]
@@ -86,7 +88,7 @@ class OpenAIBackendAPI:
         self.session_id = self.fp["oai-session-id"]
         self.pow_script_sources: list[str] = []
         self.pow_data_build = ""
-        self.session = create_session(impersonate=self.network_profile.impersonate, verify=self.network_profile.verify)
+        self.session = create_session(account_proxy=self.account_proxy, impersonate=self.network_profile.impersonate, verify=self.network_profile.verify)
         self.session.headers.update(build_chatgpt_web_headers(
             self.network_profile,
             base_url=self.base_url,
@@ -155,7 +157,7 @@ class OpenAIBackendAPI:
         self.device_id = self.fp["oai-device-id"]
         self.session_id = self.fp["oai-session-id"]
 
-        self.session = create_session(impersonate=fresh.impersonate, verify=fresh.verify)
+        self.session = create_session(account_proxy=self.account_proxy, impersonate=fresh.impersonate, verify=fresh.verify)
         self.session.headers.update(build_chatgpt_web_headers(
             fresh,
             base_url=self.base_url,

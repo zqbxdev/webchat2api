@@ -66,6 +66,7 @@ PERSISTENT_CONFIG_KEYS = {
     "browser_bridge_url",
     "chat_completion_cache",
     "chat_completion_message_normalization",
+    "mihomo",
 }
 
 
@@ -95,6 +96,29 @@ def _normalize_backup_include(value: object) -> dict[str, bool]:
     for key in normalized:
         normalized[key] = _normalize_bool(source.get(key), normalized[key])
     return normalized
+
+
+DEFAULT_MIHOMO_REGION = "🇺🇸,美国,美國,United States,America"
+
+
+def _normalize_mihomo_settings(value: object) -> dict[str, object]:
+    source = value if isinstance(value, dict) else {}
+    bin_default = "scripts/.bin/mihomo"
+    ctrl_default = "127.0.0.1:9090"
+    test_url_default = "https://chatgpt.com/api/auth/csrf"
+    return {
+        "bin_path": str(source.get("bin_path") or bin_default).strip() or bin_default,
+        "port_base": _normalize_positive_int(source.get("port_base"), 30000, 1024),
+        "port_range_size": _normalize_positive_int(source.get("port_range_size"), 500, 1),
+        "external_controller": str(source.get("external_controller") or ctrl_default).strip() or ctrl_default,
+        "external_controller_secret": str(source.get("external_controller_secret") or "").strip(),
+        "region_keywords": str(source.get("region_keywords") or DEFAULT_MIHOMO_REGION).strip() or DEFAULT_MIHOMO_REGION,
+        "sync_interval_hours": _normalize_positive_int(source.get("sync_interval_hours"), 24, 1),
+        "test_url": str(source.get("test_url") or test_url_default).strip() or test_url_default,
+        "test_timeout": _normalize_positive_int(source.get("test_timeout"), 15, 1),
+        "concurrency": _normalize_positive_int(source.get("concurrency"), 16, 1),
+        "probe_retry": _normalize_positive_int(source.get("probe_retry"), 1, 0),
+    }
 
 
 def _normalize_backup_settings(value: object) -> dict[str, object]:
@@ -525,6 +549,7 @@ class ConfigStore:
         data["flaresolverr_url"] = self.flaresolverr_url
         data["flaresolverr_timeout_sec"] = self.flaresolverr_timeout_sec
         data["browser_bridge_url"] = self.browser_bridge_url
+        data["mihomo"] = self.get_mihomo_settings()
         data.pop("auth-key", None)
         return data
 
@@ -561,6 +586,8 @@ class ConfigStore:
             next_data["chat_completion_cache"] = _normalize_chat_completion_cache_settings(next_data.get("chat_completion_cache"))
         if "chat_completion_message_normalization" in next_data:
             next_data["chat_completion_message_normalization"] = _normalize_chat_completion_message_normalization_settings(next_data.get("chat_completion_message_normalization"))
+        if "mihomo" in next_data:
+            next_data["mihomo"] = _normalize_mihomo_settings(next_data.get("mihomo"))
         next_data.pop("backup_state", None)
         self.data = next_data
         self._save()
@@ -568,6 +595,9 @@ class ConfigStore:
 
     def get_backup_settings(self) -> dict[str, object]:
         return _normalize_backup_settings(self.data.get("backup"))
+
+    def get_mihomo_settings(self) -> dict[str, object]:
+        return _normalize_mihomo_settings(self.data.get("mihomo"))
 
     @property
     def enable_turnstile_solver(self) -> bool:

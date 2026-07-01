@@ -30,8 +30,8 @@ def _empty_model_result() -> dict[str, Any]:
     return {"object": "list", "data": []}
 
 
-def _fetch_chatgpt_models(OpenAIBackendAPI: type, access_token: str = "") -> dict[str, Any]:
-    with OpenAIBackendAPI(access_token) as backend:
+def _fetch_chatgpt_models(OpenAIBackendAPI: type, access_token: str = "", account_proxy: str = "") -> dict[str, Any]:
+    with OpenAIBackendAPI(access_token, account_proxy=account_proxy) as backend:
         return backend.list_models()
 
 
@@ -39,6 +39,17 @@ def _get_gpt_access_token() -> str:
     try:
         from services.account_service import account_service
         return account_service.get_text_access_token(provider=GPT_PROVIDER)
+    except Exception:
+        return ""
+
+
+def _get_account_proxy(token: str) -> str:
+    if not token:
+        return ""
+    try:
+        from services.account_service import account_service
+        account = account_service.get_account(token)
+        return str((account or {}).get("proxy") or "")
     except Exception:
         return ""
 
@@ -52,7 +63,7 @@ def list_models() -> dict[str, Any]:
         access_token = _get_gpt_access_token()
         if access_token:
             try:
-                result = _fetch_chatgpt_models(OpenAIBackendAPI, access_token)
+                result = _fetch_chatgpt_models(OpenAIBackendAPI, access_token, _get_account_proxy(access_token))
             except Exception:
                 try:
                     result = _fetch_chatgpt_models(OpenAIBackendAPI)

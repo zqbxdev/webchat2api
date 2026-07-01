@@ -35,6 +35,9 @@ git_cache/
 backup_state.json
 logs.jsonl
 
+# Downloaded mihomo kernel binary (subscription sync script)
+scripts/.bin/
+
 # Generated web assets
 web/.next/
 web/out/

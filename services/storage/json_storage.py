@@ -82,6 +82,22 @@ class JSONStorageBackend(StorageBackend):
             encoding="utf-8",
         )
 
+    def load_proxy_pool(self) -> list[dict[str, Any]]:
+        """从 JSON 文件加载代理池数据"""
+        return self._load_json_list(self.file_path.with_name("proxy_pool.json"))
+
+    def save_proxy_pool(self, items: list[dict[str, Any]]) -> None:
+        """保存代理池数据到 JSON 文件"""
+        self._save_json_list(self.file_path.with_name("proxy_pool.json"), items)
+
+    def load_subscriptions(self) -> list[dict[str, Any]]:
+        """从 JSON 文件加载订阅源数据"""
+        return self._load_json_list(self.file_path.with_name("subscriptions.json"))
+
+    def save_subscriptions(self, items: list[dict[str, Any]]) -> None:
+        """保存订阅源数据到 JSON 文件"""
+        self._save_json_list(self.file_path.with_name("subscriptions.json"), items)
+
     def load_settings(self) -> dict[str, Any]:
         """从 JSON 文件加载全局设置"""
         return self._load_json_object(self.settings_path)

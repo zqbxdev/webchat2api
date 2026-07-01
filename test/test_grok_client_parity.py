@@ -410,12 +410,13 @@ class GrokClientParityTests(unittest.TestCase):
     def test_console_chat_completion_marks_console_used_on_success(self) -> None:
         account_service = types.SimpleNamespace(
             get_grok_console_access_token=mock.Mock(return_value="console-token"),
+            get_account=mock.Mock(return_value={}),
             mark_grok_console_used=mock.Mock(),
         )
         spec = resolve_model("grok-4.20-non-reasoning")
 
         class FakeConsoleClient:
-            def __init__(self, access_token: str) -> None:
+            def __init__(self, access_token: str, account: Any = None) -> None:
                 self.access_token = access_token
 
             def __enter__(self) -> "FakeConsoleClient":
@@ -439,12 +440,13 @@ class GrokClientParityTests(unittest.TestCase):
     def test_console_chat_completion_events_marks_console_used_on_success(self) -> None:
         account_service = types.SimpleNamespace(
             get_grok_console_access_token=mock.Mock(return_value="console-token"),
+            get_account=mock.Mock(return_value={}),
             mark_grok_console_used=mock.Mock(),
         )
         spec = resolve_model("grok-4.20-non-reasoning")
 
         class FakeConsoleClient:
-            def __init__(self, access_token: str) -> None:
+            def __init__(self, access_token: str, account: Any = None) -> None:
                 self.access_token = access_token
 
             def __enter__(self) -> "FakeConsoleClient":

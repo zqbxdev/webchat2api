@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
@@ -156,7 +157,7 @@ class AccountService:
         self.storage = storage_backend
         self._lock = Lock()
         self._image_slot_condition = Condition(self._lock)
-        self._index = 0
+        self._index = int.from_bytes(os.urandom(4), "big")
         self._now = now or (lambda: datetime.now(timezone.utc).timestamp())
         self._accounts = self._load_accounts()
         self._image_inflight: dict[str, int] = {}
@@ -384,6 +385,7 @@ class AccountService:
         provider_strategy = account_strategy(normalized["provider"])
         if normalized["provider"] in {GROK_PROVIDER, GEMINI_PROVIDER}:
             normalized = provider_strategy.normalize_account(normalized)
+        normalized["proxy"] = str(normalized.get("proxy") or "").strip()
         normalized["success"] = int(normalized.get("success") or 0)
         normalized["fail"] = int(normalized.get("fail") or 0)
         normalized["last_used_at"] = normalized.get("last_used_at")
@@ -549,11 +551,72 @@ class AccountService:
                 next_item.update({"app_chat": True, "last_check_status": "valid_by_call", "last_success_at": now, **self._grok_clear_transient_metadata(now)})
                 if next_item.get("status") != "禁用":
                     next_item["status"] = "正常"
+            else:
+                # GPT: a successful search proves the account is healthy — clear any
+                # lingering cooldown/abnormal state and reset the failure counter so
+                # it doesn't accumulate toward 禁用 across recovered transient failures.
+                now = self._timestamp_string()
+                next_item["fail"] = 0
+                next_item["last_success_at"] = now
+                if next_item.get("status") not in ("禁用",):
+                    next_item["status"] = "正常"
+                next_item.pop("cooldown_until", None)
+                next_item.pop("state_reason", None)
             account = self._normalize_account(next_item)
             if account is None:
                 return
             self._set_account_locked(account)
             self._save_accounts()
+
+    def mark_search_failure(self, access_token: str, exc: Exception, provider: str = GPT_PROVIDER) -> None:
+        """Transition a GPT account's state based on a search failure.
+
+        Auto state-switching across 限流 / 异常 / 禁用:
+        - rate-limit (429/402) or Cloudflare (403): → 限流 (cooldown 15min, auto-recovers via watcher)
+        - auth-invalid (401 token_invalidated): → 异常; after 3 consecutive auth failures → 禁用
+        - transient network errors (timeout/TLS): no change (don't penalize healthy accounts)
+
+        Called from the search path so degraded accounts exit rotation immediately
+        instead of being retried on every request (which cascades into pool-wide failure
+        under sustained load). Recoverable accounts are re-validated by the limited-account
+        watcher (list_limited_tokens includes 限流 + 异常); permanently dead ones escalate
+        to 禁用 so they stay out of rotation but are kept for batch re-add.
+        """
+        if not access_token:
+            return
+        text = str(exc).lower()
+        is_auth = any(marker in text for marker in (
+            "token_invalidated", "token_revoked",
+            "authentication token has been invalidated",
+            "invalidated oauth token", "status=401",
+        ))
+        is_rate_or_cf = any(marker in text for marker in (
+            "status=403", "status=429", "status=402",
+            "rate_limit", "cloudflare",
+        ))
+        if not (is_auth or is_rate_or_cf):
+            return
+        account = self.get_account(access_token, provider=provider) or {}
+        prev_fail = int(account.get("fail") or 0)
+        now = self._timestamp_string()
+        if is_auth and prev_fail + 1 >= 3:
+            new_status, reason, fail_count = "禁用", "search_auth_failure_disabled", prev_fail + 1
+        elif is_auth:
+            new_status, reason, fail_count = "异常", "search_auth_failure", prev_fail + 1
+        else:
+            new_status, reason, fail_count = "限流", "search_rate_limited", prev_fail
+        updates = {
+            "status": new_status,
+            "state_reason": reason,
+            "last_check_error": str(exc)[:200],
+            "last_check_at": now,
+            "fail": fail_count,
+        }
+        if new_status in ("限流", "异常"):
+            updates["cooldown_until"] = self._timestamp_string(900)
+        self.update_account(access_token, updates, provider=provider)
+        log_service.add(LOG_TYPE_ACCOUNT, "搜索失败状态切换",
+                        {"token": anonymize_token(access_token), "status": new_status, "reason": reason})
 
     def mark_grok_console_used(self, access_token: str, success: bool = True) -> None:
         if not access_token:
@@ -604,11 +667,14 @@ class AccountService:
             return self._list_account_items_locked(provider)
 
     def list_limited_tokens(self) -> list[str]:
+        # Includes both 限流 (rate-limited) and 异常 (auth-invalidated) accounts so the
+        # limited-account-watcher re-validates both: 限流 recovers when the cooldown
+        # passes, 异常 recovers if the access token is still valid (or stays 异常 if dead).
         with self._lock:
             return [
                 token
                 for item in self._all_accounts_locked()
-                if item.get("status") == "限流"
+                if item.get("status") in ("限流", "异常")
                    and normalize_provider(item.get("provider")) == GPT_PROVIDER
                    and (token := item.get("access_token") or "")
             ]

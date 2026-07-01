@@ -350,7 +350,7 @@ class AccountProviderTests(unittest.TestCase):
         self.assertTrue(strategy.supports_refresh(accounts[0]))
         self.assertEqual(result["refreshed"], 1)
         self.assertEqual(result["errors"], [])
-        client_class.assert_called_once_with("__Secure-1PSID=psid; __Secure-1PSIDTS=old-psidts", None)
+        client_class.assert_called_once_with("__Secure-1PSID=psid; __Secure-1PSIDTS=old-psidts", None, account_proxy="")
         client.rotate_psidts.assert_called_once_with()
         client.bootstrap_session_token.assert_called_once_with()
         refreshed_accounts = service.list_accounts(provider=GEMINI_PROVIDER)

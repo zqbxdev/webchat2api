@@ -665,10 +665,12 @@ def _raise_console_upstream_error(access_token: str, upstream_status: int, respo
 
 
 class GrokConsoleClient:
-    def __init__(self, access_token: str) -> None:
+    def __init__(self, access_token: str, account: dict[str, Any] | None = None) -> None:
         self.access_token = access_token
+        self.account = account if isinstance(account, dict) else None
+        self.account_proxy = str((self.account or {}).get("proxy") or "")
         self.network_profile = _grok_console_profile()
-        self.session = create_session(impersonate=self.network_profile.impersonate, verify=self.network_profile.verify)
+        self.session = create_session(account_proxy=self.account_proxy, impersonate=self.network_profile.impersonate, verify=self.network_profile.verify)
 
     def close(self) -> None:
         self.session.close()
@@ -1838,9 +1840,10 @@ class GrokAppChatClient:
     def __init__(self, access_token: str, account: dict[str, Any] | None = None) -> None:
         self.access_token = access_token
         self.account = account if isinstance(account, dict) else None
+        self.account_proxy = str((self.account or {}).get("proxy") or "")
         self.network_profile = _grok_app_chat_profile()
         impersonate = _app_chat_impersonate(self.network_profile, self.account)
-        self.session = create_session(impersonate=impersonate, verify=self.network_profile.verify)
+        self.session = create_session(account_proxy=self.account_proxy, impersonate=impersonate, verify=self.network_profile.verify)
 
     def close(self) -> None:
         self.session.close()
@@ -2421,8 +2424,9 @@ def console_chat_completion(body: dict[str, Any], spec: ModelSpec, messages: lis
     access_token = account_service.get_grok_console_access_token()
     if not access_token:
         raise HTTPException(status_code=503, detail={"error": "no available Grok account"})
+    account = account_service.get_account(access_token, provider="grok")
     try:
-        with GrokConsoleClient(access_token) as client:
+        with GrokConsoleClient(access_token, account) as client:
             response_json = client.create_response(payload)
     except GrokConsoleError as exc:
         account_service.mark_grok_console_used(access_token, success=False)
@@ -2442,8 +2446,9 @@ def console_chat_completion_events(body: dict[str, Any], spec: ModelSpec, messag
     access_token = account_service.get_grok_console_access_token()
     if not access_token:
         raise HTTPException(status_code=503, detail={"error": "no available Grok account"})
+    account = account_service.get_account(access_token, provider="grok")
     try:
-        with GrokConsoleClient(access_token) as client:
+        with GrokConsoleClient(access_token, account) as client:
             for event in client.stream_response(payload):
                 yield event
     except GrokConsoleError as exc:

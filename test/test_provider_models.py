@@ -37,7 +37,7 @@ class FakeBackend:
     fail_authenticated = False
     fail_anonymous = False
 
-    def __init__(self, access_token: str = "") -> None:
+    def __init__(self, access_token: str = "", **kwargs) -> None:
         self.access_token = access_token
         self.__class__.calls.append(access_token)
 
@@ -160,6 +160,7 @@ class ProviderModelListTests(unittest.TestCase):
         account_service = FakeAccountService("stored-token")
 
         with mock.patch.object(openai_v1_models, "_get_gpt_access_token", account_service.get_text_access_token), \
+             mock.patch.object(openai_v1_models, "_get_account_proxy", return_value=""), \
              mock.patch.dict(sys.modules, {"services.openai_backend_api": types.SimpleNamespace(
                  OpenAIBackendAPI=FakeBackend,
              )}):
@@ -180,6 +181,7 @@ class ProviderModelListTests(unittest.TestCase):
         FakeBackend.fail_authenticated = True
 
         with mock.patch.object(openai_v1_models, "_get_gpt_access_token", account_service.get_text_access_token), \
+             mock.patch.object(openai_v1_models, "_get_account_proxy", return_value=""), \
              mock.patch.dict(sys.modules, {"services.openai_backend_api": types.SimpleNamespace(
                  OpenAIBackendAPI=FakeBackend,
              )}):
@@ -199,6 +201,7 @@ class ProviderModelListTests(unittest.TestCase):
         FakeBackend.fail_anonymous = True
 
         with mock.patch.object(openai_v1_models, "_get_gpt_access_token", account_service.get_text_access_token), \
+             mock.patch.object(openai_v1_models, "_get_account_proxy", return_value=""), \
              mock.patch.dict(sys.modules, {"services.openai_backend_api": types.SimpleNamespace(
                  OpenAIBackendAPI=FakeBackend,
              )}):

@@ -119,6 +119,40 @@ class GitStorageBackend(StorageBackend):
             print(f"[git-storage] save failed: {e}")
             raise e
 
+    def load_proxy_pool(self) -> list[dict[str, Any]]:
+        """从 Git 仓库加载代理池数据"""
+        try:
+            return self._load_json_file("proxy_pool.json")
+        except (FileNotFoundError, json.JSONDecodeError):
+            return []
+        except Exception:
+            return []
+
+    def save_proxy_pool(self, items: list[dict[str, Any]]) -> None:
+        """保存代理池数据到 Git 仓库"""
+        try:
+            self._save_json_file("proxy_pool.json", items, "Update proxy pool data")
+        except Exception as e:
+            print(f"[git-storage] save proxy pool failed: {e}")
+            raise e
+
+    def load_subscriptions(self) -> list[dict[str, Any]]:
+        """从 Git 仓库加载订阅源数据"""
+        try:
+            return self._load_json_file("subscriptions.json")
+        except (FileNotFoundError, json.JSONDecodeError):
+            return []
+        except Exception:
+            return []
+
+    def save_subscriptions(self, items: list[dict[str, Any]]) -> None:
+        """保存订阅源数据到 Git 仓库"""
+        try:
+            self._save_json_file("subscriptions.json", items, "Update subscriptions data")
+        except Exception as e:
+            print(f"[git-storage] save subscriptions failed: {e}")
+            raise e
+
     def load_settings(self) -> dict[str, Any]:
         """从 Git 仓库加载全局设置"""
         try:

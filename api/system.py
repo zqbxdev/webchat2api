@@ -14,6 +14,8 @@ from services.image_service import delete_images, download_images_zip, get_image
 from services.image_storage_service import ImageStorageError, image_storage_service
 from services.image_tags_service import delete_tag, get_all_tags, set_tags
 from services.log_service import log_service
+from services.proxy_health_service import proxy_health_service
+from services.proxy_pool_service import proxy_pool_service
 from services.proxy_service import test_proxy
 
 
@@ -42,6 +44,20 @@ class LogDeleteRequest(BaseModel):
     ids: list[str] = []
 class BackupDeleteRequest(BaseModel):
     key: str = ""
+
+class ProxyPoolImportRequest(BaseModel):
+    proxies: str = ""
+
+class ProxyPoolDeleteRequest(BaseModel):
+    ids: list[str] = []
+
+class ProxyPoolSubscriptionRequest(BaseModel):
+    name: str = ""
+    url: str = ""
+    region_keywords: str = ""
+
+class ProxyPoolSyncRequest(BaseModel):
+    subscription_id: str | None = None
 
 
 def create_router(app_version: str) -> APIRouter:
@@ -232,5 +248,77 @@ def create_router(app_version: str) -> APIRouter:
         require_admin(authorization)
         count = delete_tag(tag)
         return {"ok": True, "removed_from": count}
+
+    @router.get("/api/proxy-pool")
+    async def list_proxy_pool(authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        return {"items": proxy_pool_service.list_items()}
+
+    @router.post("/api/proxy-pool")
+    async def import_proxy_pool(body: ProxyPoolImportRequest, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        text = (body.proxies or "").strip()
+        if not text:
+            raise HTTPException(status_code=400, detail={"error": "proxies is required"})
+        result = proxy_pool_service.import_proxies(text)
+        return {**result, "items": proxy_pool_service.list_items()}
+
+    @router.delete("/api/proxy-pool")
+    async def delete_proxy_pool(body: ProxyPoolDeleteRequest, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        if not body.ids:
+            result = proxy_pool_service.clear_all()
+        else:
+            result = proxy_pool_service.delete_proxies(body.ids)
+        return {**result, "items": proxy_pool_service.list_items()}
+
+    @router.post("/api/proxy-pool/assign")
+    async def assign_proxy_pool(authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        return await run_in_threadpool(proxy_pool_service.assign_to_accounts)
+
+    @router.post("/api/proxy-pool/clear")
+    async def clear_proxy_pool_assignments(authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        return await run_in_threadpool(proxy_pool_service.clear_assignments)
+
+    # ── 订阅源管理 ──
+    @router.get("/api/proxy-pool/subscriptions")
+    async def list_subscriptions(authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        return {"items": proxy_health_service.list_subscriptions()}
+
+    @router.post("/api/proxy-pool/subscriptions")
+    async def add_subscription(body: ProxyPoolSubscriptionRequest, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        if not body.url.strip():
+            raise HTTPException(status_code=400, detail={"error": "url is required"})
+        sub = await run_in_threadpool(
+            proxy_health_service.add_subscription, body.name, body.url, body.region_keywords
+        )
+        return {"item": sub, "items": proxy_health_service.list_subscriptions()}
+
+    @router.delete("/api/proxy-pool/subscriptions/{sub_id}")
+    async def delete_subscription(sub_id: str, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        result = await run_in_threadpool(proxy_health_service.delete_subscription, sub_id)
+        return {**result, "items": proxy_health_service.list_subscriptions()}
+
+    # ── 同步（异步 task，前端轮询 sync/{task_id}） ──
+    @router.post("/api/proxy-pool/sync")
+    async def sync_proxy_pool(body: ProxyPoolSyncRequest, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        return proxy_health_service.run_sync_now(body.subscription_id)
+
+    @router.get("/api/proxy-pool/sync/{task_id}")
+    async def get_sync_status(task_id: str, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        return proxy_health_service.get_task_status(task_id)
+
+    # ── 健康视图（pool item 带 health/latency 字段） ──
+    @router.get("/api/proxy-pool/health")
+    async def proxy_pool_health(authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        return {"items": proxy_pool_service.list_items()}
 
     return router

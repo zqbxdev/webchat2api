@@ -23,7 +23,7 @@ class TurnstileRetryTests(unittest.TestCase):
         created_tokens: list[str] = []
 
         class FakeBackend:
-            def __init__(self, access_token: str = "") -> None:
+            def __init__(self, access_token: str = "", **kwargs) -> None:
                 self.access_token = access_token
                 created_tokens.append(access_token)
 
@@ -53,6 +53,7 @@ class TurnstileRetryTests(unittest.TestCase):
             mock.patch.object(gpt_runtime, "OpenAIBackendAPI", FakeBackend),
             mock.patch.object(gpt_runtime, "conversation_events", fake_conversation_events),
             mock.patch.object(gpt_runtime, "account_service", account_service),
+            mock.patch.object(gpt_runtime, "_account_proxy", return_value=""),
         ):
             deltas = list(conversation.stream_text_deltas(initial_backend, request))
 

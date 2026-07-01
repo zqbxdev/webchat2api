@@ -53,6 +53,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN pip install --no-cache-dir uv
 
+# mihomo 代理内核（订阅代理池用，固定 v1.19.27 与开发环境一致）
+RUN case "$TARGETARCH" in \
+      amd64) _ARCH="linux-amd64-compatible" ;; \
+      arm64) _ARCH="linux-arm64" ;; \
+      *) echo "unsupported arch: $TARGETARCH" && exit 1 ;; \
+    esac && \
+    _VER="v1.19.27" && \
+    mkdir -p /app/scripts/.bin && \
+    curl -fsSL "https://github.com/MetaCubeX/mihomo/releases/download/${_VER}/mihomo-${_ARCH}-${_VER}.gz" -o /tmp/mihomo.gz && \
+    python3 -c "import gzip,shutil; shutil.copyfileobj(gzip.open('/tmp/mihomo.gz','rb'), open('/app/scripts/.bin/mihomo','wb'))" && \
+    chmod +x /app/scripts/.bin/mihomo && \
+    rm -f /tmp/mihomo.gz
+
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 

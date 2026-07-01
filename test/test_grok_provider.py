@@ -1003,6 +1003,7 @@ class GrokProviderTests(unittest.TestCase):
     def test_console_chat_completion_uses_reserved_console_quota(self) -> None:
         account_service = types.SimpleNamespace(
             get_grok_console_access_token=mock.Mock(return_value="grok-token"),
+            get_account=mock.Mock(return_value={}),
             mark_grok_console_used=mock.Mock(),
         )
         response_json = {
@@ -1026,6 +1027,7 @@ class GrokProviderTests(unittest.TestCase):
     def test_console_chat_completion_marks_failed_request_without_extra_quota_decrement(self) -> None:
         account_service = types.SimpleNamespace(
             get_grok_console_access_token=mock.Mock(return_value="grok-token"),
+            get_account=mock.Mock(return_value={}),
             mark_grok_console_used=mock.Mock(),
         )
         client = mock.Mock()
@@ -1046,6 +1048,7 @@ class GrokProviderTests(unittest.TestCase):
     def test_console_chat_completion_marks_empty_response_failed_without_extra_quota_decrement(self) -> None:
         account_service = types.SimpleNamespace(
             get_grok_console_access_token=mock.Mock(return_value="grok-token"),
+            get_account=mock.Mock(return_value={}),
             mark_grok_console_used=mock.Mock(),
         )
         client = mock.Mock()
@@ -1068,6 +1071,7 @@ class GrokProviderTests(unittest.TestCase):
     def test_console_chat_completion_validates_payload_before_reserving_quota(self) -> None:
         account_service = types.SimpleNamespace(
             get_grok_console_access_token=mock.Mock(return_value="grok-token"),
+            get_account=mock.Mock(return_value={}),
             mark_grok_console_used=mock.Mock(),
         )
 
@@ -1081,6 +1085,7 @@ class GrokProviderTests(unittest.TestCase):
     def test_console_stream_uses_reserved_console_quota(self) -> None:
         account_service = types.SimpleNamespace(
             get_grok_console_access_token=mock.Mock(return_value="grok-token"),
+            get_account=mock.Mock(return_value={}),
             mark_grok_console_used=mock.Mock(),
         )
         client = mock.Mock()
@@ -2167,12 +2172,13 @@ class GrokProviderTests(unittest.TestCase):
     def test_grok_console_stream_does_not_mark_reserved_quota_when_generator_is_closed(self) -> None:
         account_service = types.SimpleNamespace(
             get_grok_console_access_token=mock.Mock(return_value="selected-token"),
+            get_account=mock.Mock(return_value={}),
             mark_grok_console_used=mock.Mock(),
         )
         spec = resolve_model("grok-4.3")
 
         class FakeClient:
-            def __init__(self, access_token: str) -> None:
+            def __init__(self, access_token: str, account=None) -> None:
                 self.access_token = access_token
 
             def __enter__(self) -> "FakeClient":
@@ -2202,12 +2208,13 @@ class GrokProviderTests(unittest.TestCase):
     def test_grok_console_stream_does_not_mark_reserved_quota_when_stream_completes_without_events(self) -> None:
         account_service = types.SimpleNamespace(
             get_grok_console_access_token=mock.Mock(return_value="selected-token"),
+            get_account=mock.Mock(return_value={}),
             mark_grok_console_used=mock.Mock(),
         )
         spec = resolve_model("grok-4.3")
 
         class FakeClient:
-            def __init__(self, access_token: str) -> None:
+            def __init__(self, access_token: str, account=None) -> None:
                 self.access_token = access_token
 
             def __enter__(self) -> "FakeClient":
@@ -2235,12 +2242,13 @@ class GrokProviderTests(unittest.TestCase):
     def test_grok_console_stream_marks_account_used_after_partial_stream_error(self) -> None:
         account_service = types.SimpleNamespace(
             get_grok_console_access_token=mock.Mock(return_value="selected-token"),
+            get_account=mock.Mock(return_value={}),
             mark_grok_console_used=mock.Mock(),
         )
         spec = resolve_model("grok-4.3")
 
         class FakeClient:
-            def __init__(self, access_token: str) -> None:
+            def __init__(self, access_token: str, account=None) -> None:
                 self.access_token = access_token
 
             def __enter__(self) -> "FakeClient":

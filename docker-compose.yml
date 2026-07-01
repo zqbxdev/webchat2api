@@ -14,7 +14,7 @@ services:
       # - ./config.json:/app/config.json
     environment:
       LOGIN_SECRET: admin
-      STORAGE_BACKEND: json
+      STORAGE_BACKEND: sqlite
       # 如需访问宿主机代理，可同时取消下一行和 extra_hosts 的注释。
       # PROXY_URL: http://host.docker.internal:7890
       # WEBCHAT2API_BASE_URL: https://your-domain.com

@@ -459,11 +459,11 @@ def parse_web_response_text(raw_text: str) -> object:
 
 
 class GeminiWebClient:
-    def __init__(self, cookie_header: str, user_agent: str | None = None) -> None:
+    def __init__(self, cookie_header: str, user_agent: str | None = None, account_proxy: str = "") -> None:
         self.cookie_header = cookie_header
         self.user_agent = user_agent or GEMINI_BROWSER_USER_AGENT
         self.session_token = ""
-        self.session = create_session()
+        self.session = create_session(account_proxy=account_proxy)
 
     def __enter__(self) -> "GeminiWebClient":
         return self
@@ -587,7 +587,7 @@ def fetch_authenticated_init_body() -> str:
         return ""
     account = account_service.get_account(access_token) or {"access_token": access_token, "provider": "gemini"}
     cookie_header = account_cookie_header(account)
-    with GeminiWebClient(cookie_header, account.get("user_agent")) as client:
+    with GeminiWebClient(cookie_header, account.get("user_agent"), account_proxy=str(account.get("proxy") or "")) as client:
         init_body = client.fetch_init_body()
         persist_gemini_session(account_service, access_token, account, client.cookie_header)
         return init_body
@@ -614,7 +614,7 @@ def chat_completion(body: dict[str, Any], spec: ModelSpec, messages: list[dict[s
     if session_token:
         payload["session_token"] = session_token
     try:
-        with GeminiWebClient(cookie_header, account.get("user_agent")) as client:
+        with GeminiWebClient(cookie_header, account.get("user_agent"), account_proxy=str(account.get("proxy") or "")) as client:
             response_payload = client.generate(payload)
             persist_gemini_session(account_service, access_token, account, client.cookie_header, client.session_token)
     except GeminiWebError as exc:
